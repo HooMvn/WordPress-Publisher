@@ -17,7 +17,7 @@ WordPress (post.published / post.updated)
 │  → create N Publication Jobs (1/platform)  │
 │  → aggregate N items → 1 response          │  → Fix #3
 └───────────────────────────────────────────┘
-        │ omid90_events / omid90_publish_queue (Data Table)
+        │ wordpress-publisher_events / wordpress-publisher_publish_queue (Data Table)
         ▼
 ┌───────────────────────────────────────────┐
 │ WP 02 — Queue Publisher + Adapters         │
@@ -30,14 +30,14 @@ WordPress (post.published / post.updated)
 │  → success/retry/failed → rate-limit wait  │
 └───────────────────────────────────────────┘
         │
-        ├─▶ success → omid90_publish_queue.status = sent
+        ├─▶ success → wordpress-publisher_publish_queue.status = sent
         └─▶ failure → retry (temporary) یا failed (permanent/max attempts)
                           │
                           ▼
                  ┌─────────────────────────┐
                  │ WP 03 — Error Handler    │
                  │  errorTrigger + dead-job │
-                 │  → omid90_errors + Alert │
+                 │  → wordpress-publisher_errors + Alert │
                  └─────────────────────────┘
 
 ┌───────────────────────────────────────────┐
