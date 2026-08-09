@@ -32,7 +32,7 @@
 | ستون | نوع | توضیح |
 |---|---|---|
 | `job_id` | Text (**Unique**) | `{postId}:{platform}:{publicationVersion}` |
-| `event_id` | Text | ارجاع به `omid90_events.event_id` |
+| `event_id` | Text | ارجاع به `wordpress-publisher_events.event_id` |
 | `event_type` | Text | |
 | `platform` | Text | `telegram` / `bale` / `eitaa` / `rubika` / `x` / `linkedin` / آینده |
 | `status` | Text | `pending` / `processing` / `retry_wait` / `sent` / `failed` / `skipped` |
