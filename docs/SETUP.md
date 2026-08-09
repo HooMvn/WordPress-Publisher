@@ -52,9 +52,9 @@ docker compose logs -f n8n-main   # تا زمان آماده شدن n8n صبر �
 ## 5. ساخت Data Tableها
 
 طبق [`DATA_TABLES.md`](./DATA_TABLES.md) سه جدول را در n8n UI (`Data Tables` یا `Data Store`، بسته به نسخه) بسازید:
-- `omid90_events`
-- `omid90_publish_queue`
-- `omid90_errors`
+- `wordpress-publisher_events`
+- `wordpress-publisher_publish_queue`
+- `wordpress-publisher_errors`
 
 ستون‌های دقیق و نوع هرکدام در همان فایل آمده.
 
