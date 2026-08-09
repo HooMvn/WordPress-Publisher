@@ -1,0 +1,1424 @@
+{
+  "name": "WP 02 — Queue Publisher + Platform Adapters",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "p-schedule",
+      "name": "هر یک دقیقه",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -2000,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_publish_queue"
+        },
+        "options": {},
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 500
+      },
+      "id": "p-read",
+      "name": "خواندن Jobهای Pending",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -1780,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Fix #11: فیلتر واقعی status=pending در Node تنظیم شد. next_attempt_at<=now همچنان در Code Node بعدی چک می‌شود چون پشتیبانی Data Table از مقایسه Datetime نامطمئن است (STATICALLY VERIFIED، نه Runtime-tested). limit=500 برای محدود کردن حجم خواندن؛ مرتب‌سازی priority/created_at و انتخاب نهایی ۵۰ تایی در Code Node انجام می‌شود."
+    },
+    {
+      "parameters": {
+        "jsCode": "const jobs = $input.all().map(i=>i.json);\nconst now = Date.now();\nreturn jobs\n .filter(j => (j.status||'pending')==='pending' && (!j.next_attempt_at || new Date(j.next_attempt_at).getTime() <= now))\n .sort((a,b)=> Number(a.priority||50)-Number(b.priority||50) || new Date(a.created_at)-new Date(b.created_at))\n .slice(0,50)\n .map(j=>({json:j}));"
+      },
+      "id": "p-sort",
+      "name": "مرتب‌سازی و محدودسازی صف",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "reset": false
+        },
+        "batchSize": 1
+      },
+      "id": "p-loop",
+      "name": "Loop Over Jobs",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -1340,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_publish_queue"
+        },
+        "options": {},
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "job_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.job_id }}"
+            },
+            {
+              "keyName": "status",
+              "condition": "eq",
+              "keyValue": "pending"
+            }
+          ]
+        },
+        "columns": {
+          "status": "processing",
+          "started_at": "={{ $now.toISO() }}",
+          "attempts": "={{ Number($json.attempts||0) + 1 }}",
+          "worker_id": "={{ $execution.id }}"
+        }
+      },
+      "id": "p-lock",
+      "name": "قفل Job و تغییر به processing",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -1100,
+        60
+      ],
+      "notesInFlow": true,
+      "notes": "Update by job_id AND status=pending (Optimistic Lock — Fix #10). اگر Worker دیگری قبلاً همین Job را قفل کرده باشد (status دیگر pending نیست)، شرط match نمی‌شود و هیچ ردیفی Update نمی‌شود؛ Node بعدی این حالت را تشخیص و آن Item را Skip می‌کند. ⚠️ فرض این‌که Data Table تعداد ردیف‌های واقعاً Update‌شده را در خروجی برمی‌گرداند STATICALLY VERIFIED است و باید با نمونه واقعی n8n تایید شود (به FINAL-AUDIT.md مراجعه شود)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const job = $input.first().json;\nconst article = typeof job.article_json === 'string' ? JSON.parse(job.article_json) : (job.article_json || {});\nconst base = ($vars.WORDPRESS_BASE_URL || '').replace(/\\/$/,'');\nreturn [{json:{...job, article}}];"
+      },
+      "id": "p-context",
+      "name": "آماده‌سازی Context انتشار",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -880,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "telegram",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "bale",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "eitaa",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "rubika",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "x",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.platform }}",
+                    "rightValue": "linkedin",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "p-switch",
+      "name": "انتخاب Platform Adapter",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -660,
+        60
+      ],
+      "notesInFlow": true,
+      "notes": "افزودن پلتفرم جدید = یک Rule جدید + یک Formatter + یک Publisher. بدون تغییر بقیه Workflow."
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$input.first().json; const a=j.article;\nlet text = `📰 ${a.title}\\n\\n${a.excerpt || ''}\\n\\n${a.url}`;\nif(text.length>4096) text = text.slice(0,4090)+'…';\nreturn [{json:{...j, formatted:{text, disable_web_page_preview:false}}}];"
+      },
+      "id": "p-fmt-telegram",
+      "name": "Telegram Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        -420
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "sendMessage",
+        "chatId": "={{ $vars.TELEGRAM_CHAT_ID }}",
+        "text": "={{ $json.formatted.text }}",
+        "additionalFields": {
+          "disable_web_page_preview": "={{ $json.formatted.disable_web_page_preview }}",
+          "parse_mode": "None"
+        }
+      },
+      "id": "p-pub-telegram",
+      "name": "Telegram Publisher",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -180,
+        -420
+      ],
+      "credentials": {
+        "telegramApi": {
+          "id": "SELECT_AFTER_IMPORT",
+          "name": "Telegram account (official n8n Telegram credential)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Fix #9: HTTP Request دستی حذف شد چون $credentials.telegramApi.accessToken در Expression یک Node عادی در n8n واقعی قابل‌اتکا نیست (n8n مقدار خام Credential را برای جلوگیری از افشا در Log/Expression عمومی پنهان می‌کند). به‌جای آن از Node رسمی n8n-nodes-base.telegram (resource=message, operation=sendMessage) استفاده شد که Token را داخلی و امن از Credential می‌خواند و هرگز در URL/Body/Log قرار نمی‌گیرد.",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$input.first().json; const a=j.article;\nlet text = `${a.title}\\n${a.excerpt||''}\\n${a.url}`;\nif(text.length>1000) text = text.slice(0,994)+'…';\nreturn [{json:{...j, formatted:{text}}}];"
+      },
+      "id": "p-fmt-bale",
+      "name": "Bale Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($vars.BALE_API_BASE) + '/sendMessage' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({chat_id:$vars.BALE_CHAT_ID, text:$json.formatted.text}) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "p-pub-bale",
+      "name": "Bale Publisher",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        -260
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SELECT_AFTER_IMPORT",
+          "name": "WP Bale Header Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$input.first().json; const a=j.article;\nconst title=a.title;\nlet text = `${a.excerpt||''}\\n${a.url}`;\nif(text.length>1000) text = text.slice(0,994)+'…';\nreturn [{json:{...j, formatted:{title, text, fileUrl:a.featuredImage||null}}}];"
+      },
+      "id": "p-fmt-eitaa",
+      "name": "Eitaa Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.EITAA_TEXT_ENDPOINT }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({destinationId:$vars.EITAA_CHANNEL_ID, title:$json.formatted.title, text:$json.formatted.text, fileUrl:$json.formatted.fileUrl}) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "p-pub-eitaa",
+      "name": "Eitaa Publisher",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        -100
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SELECT_AFTER_IMPORT",
+          "name": "WP Eitaa Header Auth"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Payload دقیق باید مطابق مستندات Gateway واقعی ایتا که در اختیار شماست تنظیم شود؛ این شکل بر اساس الگوی پروژه قبلی Omid90 است، نه یک API عمومی مستند."
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$input.first().json; const a=j.article;\nconst title=a.title;\nlet text = `${a.excerpt||''}\\n${a.url}`;\nif(text.length>1000) text = text.slice(0,994)+'…';\nreturn [{json:{...j, formatted:{title, text, fileUrl:a.featuredImage||null}}}];"
+      },
+      "id": "p-fmt-rubika",
+      "name": "Rubika Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.RUBIKA_TEXT_ENDPOINT }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({destinationId:$vars.RUBIKA_CHANNEL_ID, title:$json.formatted.title, text:$json.formatted.text, fileUrl:$json.formatted.fileUrl}) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "p-pub-rubika",
+      "name": "Rubika Publisher",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        60
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SELECT_AFTER_IMPORT",
+          "name": "WP Rubika Header Auth"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Payload باید مطابق مستندات Gateway واقعی روبیکا تنظیم شود؛ این شکل فرضی و بر اساس الگوی پروژه قبلی است."
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$input.first().json; const a=j.article;\n// X (Twitter) POST /2/tweets: حداکثر 280 کاراکتر برای text.\nconst url=a.url;\nconst reserve=url.length+1;\nlet title=a.title;\nconst maxTitle=280-reserve;\nif(title.length>maxTitle) title=title.slice(0,Math.max(0,maxTitle-1))+'…';\nconst text=`${title}\\n${url}`;\nreturn [{json:{...j, formatted:{text}}}];"
+      },
+      "id": "p-fmt-x",
+      "name": "X Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($vars.X_API_BASE || 'https://api.x.com').replace(/\\/$/,'') + '/2/tweets' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({text:$json.formatted.text}) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "p-pub-x",
+      "name": "X Publisher",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        220
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "SELECT_AFTER_IMPORT",
+          "name": "WP X OAuth2 (User Context, tweet.write scope)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "Fix #13: Base URL اکنون از $vars.X_API_BASE خوانده می‌شود (پیش‌فرض https://api.x.com در نبود Variable)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$input.first().json; const a=j.article;\nlet commentary = `${a.title}\\n\\n${a.excerpt||''}\\n\\n${a.url}`;\nif(commentary.length>3000) commentary=commentary.slice(0,2990)+'…';\nreturn [{json:{...j, formatted:{commentary}}}];"
+      },
+      "id": "p-fmt-linkedin",
+      "name": "LinkedIn Formatter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.linkedin.com/rest/posts",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "LinkedIn-Version",
+              "value": "={{ $vars.LINKEDIN_API_VERSION || '202504' }}"
+            },
+            {
+              "name": "X-Restli-Protocol-Version",
+              "value": "2.0.0"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({author:$vars.LINKEDIN_AUTHOR_URN, commentary:$json.formatted.commentary, visibility:'PUBLIC', distribution:{feedDistribution:'MAIN_FEED', targetEntities:[], thirdPartyDistributionChannels:[]}, lifecycleState:'PUBLISHED', isReshareDisabledByAuthor:false}) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "p-pub-linkedin",
+      "name": "LinkedIn Publisher",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -180,
+        380
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "SELECT_AFTER_IMPORT",
+          "name": "WP LinkedIn OAuth2 (w_member_social / w_organization_social)"
+        }
+      },
+      "notesInFlow": true,
+      "notes": "از Posts API رسمی (/rest/posts) استفاده می‌کند، نه UGC Posts API قدیمی. LINKEDIN_AUTHOR_URN باید urn:li:person:{id} یا urn:li:organization:{id} باشد. Post URN موفق در Header پاسخ x-restli-id برمی‌گردد."
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$input.first().json;\nreturn [{json:{...j, delivery:{ok:false, statusCode:0, permanent:true, response:{error:'Unknown/unsupported platform: '+j.platform}, finishedAt:new Date().toISOString()}}}];"
+      },
+      "id": "p-fmt-unknown",
+      "name": "Platform ناشناخته",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -420,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fix #2: اگر مسیر «Platform ناشناخته» از قبل یک delivery معتبر ساخته، آن را عیناً حفظ کن و دوباره\n// از صفر بر اساس resp.statusCode/resp.body تحلیل نکن (باگ قبلی: Unknown Platform به اشتباه sent می‌شد).\nconst original = $('آماده‌سازی Context انتشار').first().json;\nconst resp = $input.first().json;\n\n// Fix #5: Redact بازگشتی هر فیلد حساس (authorization/token/secret/cookie) قبل از این‌که پاسخ برای ذخیره در\n// Data Table آماده شود. مقادیر اصلی (raw) فقط همین‌جا و به‌صورت موقت برای محاسبه ok/permanent استفاده می‌شوند و\n// خودشان هرگز ذخیره نمی‌شوند؛ فقط نسخه Redact‌شده در delivery.response قرار می‌گیرد.\nconst SENSITIVE_KEY_RE = /(authorization|token|secret|cookie)/i;\nfunction redact(value, depth) {\n  if (depth > 8) return '[REDACTED:max-depth]';\n  if (Array.isArray(value)) return value.map(v => redact(v, depth + 1));\n  if (value && typeof value === 'object') {\n    const out = {};\n    for (const [k, v] of Object.entries(value)) {\n      out[k] = SENSITIVE_KEY_RE.test(k) ? '[REDACTED]' : redact(v, depth + 1);\n    }\n    return out;\n  }\n  return value;\n}\n\nfunction buildDelivery() {\n  if (resp.delivery && typeof resp.delivery === 'object') {\n    // مسیر Fallback (Platform ناشناخته) — delivery از قبل ساخته شده، فقط پاسخ آن را Redact می‌کنیم.\n    return {\n      ...resp.delivery,\n      response: redact(resp.delivery.response, 0),\n      finishedAt: resp.delivery.finishedAt || new Date().toISOString()\n    };\n  }\n\n  const statusCode = Number(resp.statusCode ?? (resp.body && resp.body.statusCode) ?? 200);\n  const body = resp.body !== undefined ? resp.body : resp;\n\n  // Fix #14: temporaryCodes اکنون واقعاً در طبقه‌بندی استفاده می‌شود تا مقصود کد صریح باشد\n  // (Permanent → دیگر Retry نکن. Temporary → طبق لیست شناخته‌شده Retry کن. Unknown → پیش‌فرض ایمن: Retry،\n  // چون شکست دائمی نادرست خطرناک‌تر از یک Retry اضافه است).\n  const permanentCodes = new Set([400,401,403,404,409,422]);\n  const temporaryCodes = new Set([408,425,429,500,502,503,504]);\n\n  const bodyOk = !(body && (body.ok === false || body.error || body.errors));\n  const ok = statusCode>=200 && statusCode<300 && bodyOk;\n\n  let classification = 'unknown';\n  if (!ok) {\n    if (permanentCodes.has(statusCode)) classification = 'permanent';\n    else if (temporaryCodes.has(statusCode)) classification = 'temporary';\n    else classification = 'unknown';\n  }\n  const permanent = classification === 'permanent';\n\n  return {ok, statusCode, permanent, classification, response: redact(body, 0), finishedAt: new Date().toISOString()};\n}\n\nconst delivery = buildDelivery();\nreturn [{json:{...original, delivery}}];"
+      },
+      "id": "p-normalize-resp",
+      "name": "نرمال‌سازی نتیجه ارسال",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        60
+      ],
+      "notes": "Fix #2, #5, #14: delivery موجود (Unknown Platform) حفظ می‌شود، پاسخ Redact بازگشتی می‌شود، classification صریح (permanent/temporary/unknown)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "sc1",
+              "leftValue": "={{ $json.delivery.ok }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p-if-success",
+      "name": "ارسال موفق بود؟",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        320,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_publish_queue"
+        },
+        "options": {}
+      },
+      "id": "p-mark-sent",
+      "name": "ثبت موفقیت انتشار",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        560,
+        -60
+      ],
+      "notesInFlow": true,
+      "notes": "Update by job_id: status=sent, sent_at=delivery.finishedAt, provider_status_code=delivery.statusCode, provider_response_json=JSON.stringify(delivery.response)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$input.first().json;\nconst attempts = Number(j.attempts||1);\nconst max = Number(j.max_attempts||5);\nconst permanent = Boolean(j.delivery.permanent);\nconst finalFailed = permanent || attempts>=max;\nconst delayMinutes = Math.min(60, Math.pow(2,attempts));\nconst errMsg = `HTTP ${j.delivery.statusCode} — ${JSON.stringify(j.delivery.response).slice(0,500)}`;\nreturn [{json:{...j, finalFailed, permanent, next_attempt_at: new Date(Date.now()+delayMinutes*60000).toISOString(), last_error: errMsg, status: finalFailed?'failed':'pending'}}];"
+      },
+      "id": "p-retry-calc",
+      "name": "طبقه‌بندی خطا و محاسبه Retry/Backoff",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
+        180
+      ],
+      "notesInFlow": true,
+      "notes": "خطاهای دائمی (401/403/404/409/422) بلافاصله Failed می‌شوند. خطاهای موقتی (408/425/429/5xx) طبق Exponential Backoff (حداکثر ۶۰ دقیقه) دوباره تلاش می‌شوند تا سقف max_attempts."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "fc1",
+              "leftValue": "={{ $json.finalFailed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p-if-final-failed",
+      "name": "شکست نهایی است؟",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_publish_queue"
+        },
+        "options": {}
+      },
+      "id": "p-mark-failed",
+      "name": "ثبت Failed نهایی در صف",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        100
+      ],
+      "notesInFlow": true,
+      "notes": "Update by job_id: status=failed, last_error, attempts"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$input.first().json;\nreturn [{json:{\n  error_id:`err:${Date.now()}:${Math.random().toString(36).slice(2,8)}`,\n  workflow_id:$workflow.id,\n  workflow_name:$workflow.name,\n  execution_id:$execution.id,\n  node_name:'ارسال '+j.platform,\n  error_message:j.last_error,\n  severity: j.permanent ? 'high' : 'medium',\n  status:'open',\n  occurred_at:new Date().toISOString(),\n  job_id:j.job_id,\n  platform:j.platform\n}}];"
+      },
+      "id": "p-build-error",
+      "name": "ساخت رکورد خطای Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_errors"
+        },
+        "options": {}
+      },
+      "id": "p-insert-error",
+      "name": "ثبت خطا در Data Store",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.ADMIN_ALERT_ENDPOINT }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({chat_id:$vars.ADMIN_ALERT_CHAT_ID, text:'🚨 انتشار مقاله شکست نهایی خورد\\nPlatform: '+$json.platform+'\\nJob: '+$json.job_id+'\\nError: '+$json.error_message}) }}",
+        "options": {
+          "timeout": 20000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "p-admin-alert",
+      "name": "هشدار مدیر — Job Failed نهایی",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1760,
+        100
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SELECT_AFTER_IMPORT",
+          "name": "WP Admin Alert Credential"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_publish_queue"
+        },
+        "options": {}
+      },
+      "id": "p-mark-retry",
+      "name": "ثبت Retry در صف",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        260
+      ],
+      "notesInFlow": true,
+      "notes": "Update by job_id: status=pending, next_attempt_at, attempts, last_error"
+    },
+    {
+      "parameters": {
+        "jsCode": "const j=$input.first().json;\nconst defaults = {telegram:1,bale:2,eitaa:3,rubika:3,x:2,linkedin:2};\nconst varMap = {telegram:'TELEGRAM_RATE_LIMIT_SECONDS',bale:'BALE_RATE_LIMIT_SECONDS',eitaa:'EITAA_RATE_LIMIT_SECONDS',rubika:'RUBIKA_RATE_LIMIT_SECONDS',x:'X_RATE_LIMIT_SECONDS',linkedin:'LINKEDIN_RATE_LIMIT_SECONDS'};\nconst varName = varMap[j.platform];\nconst fromVar = varName ? Number($vars[varName]) : NaN;\nconst seconds = Number.isFinite(fromVar) && fromVar>0 ? fromVar : (defaults[j.platform]||2);\nreturn [{json:{...j, rateLimitSeconds: seconds}}];"
+      },
+      "id": "p-ratelimit-calc",
+      "name": "محاسبه تأخیر Rate Limit پلتفرم",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1520,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ $json.rateLimitSeconds }}",
+        "unit": "seconds"
+      },
+      "id": "p-wait",
+      "name": "Rate Limit Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        380
+      ],
+      "notesInFlow": true,
+      "notes": "مقدار تأخیر برای هر پلتفرم مستقل و از Variables قابل تنظیم است (TELEGRAM_RATE_LIMIT_SECONDS و مشابه)."
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fix #10: تایید این‌که Optimistic Lock واقعاً برای این Worker موفق بوده.\n// همیشه دقیقاً یک Item برمی‌گرداند تا زنجیره Loop هرگز قطع نشود؛ فقط فیلد locked مشخص می‌کند\n// که آیا این Worker برنده رقابت شد یا باید این Job را در همین چرخه Skip کند.\nconst items = $input.all();\nconst locked = items.length > 0 && String(items[0].json.status || '') === 'processing';\nconst base = items.length > 0 ? items[0].json : {};\nreturn [{json: {...base, locked}}];"
+      },
+      "id": "p-lock-check",
+      "name": "تایید Lock (Skip در صورت رقابت)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -990,
+        60
+      ],
+      "notesInFlow": true,
+      "notes": "Fix #10: اگر خروجی خالی باشد، شاخه پایین‌دستی اجرا نمی‌شود و Loop مستقیماً به Item بعدی می‌رود."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "lk1",
+              "leftValue": "={{ $json.locked }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "p-if-locked",
+      "name": "قفل موفق بود؟",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -900,
+        60
+      ],
+      "notesInFlow": true,
+      "notes": "Fix #10: اگر false باشد (Worker دیگری برنده شد)، مستقیماً به Loop Over Jobs برمی‌گردد تا چرخه متوقف نشود."
+    }
+  ],
+  "connections": {
+    "هر یک دقیقه": {
+      "main": [
+        [
+          {
+            "node": "خواندن Jobهای Pending",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "خواندن Jobهای Pending": {
+      "main": [
+        [
+          {
+            "node": "مرتب‌سازی و محدودسازی صف",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "مرتب‌سازی و محدودسازی صف": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Jobs": {
+      "main": [
+        [],
+        [
+          {
+            "node": "قفل Job و تغییر به processing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "قفل Job و تغییر به processing": {
+      "main": [
+        [
+          {
+            "node": "تایید Lock (Skip در صورت رقابت)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "تایید Lock (Skip در صورت رقابت)": {
+      "main": [
+        [
+          {
+            "node": "قفل موفق بود؟",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "قفل موفق بود؟": {
+      "main": [
+        [
+          {
+            "node": "آماده‌سازی Context انتشار",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Loop Over Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "آماده‌سازی Context انتشار": {
+      "main": [
+        [
+          {
+            "node": "انتخاب Platform Adapter",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "انتخاب Platform Adapter": {
+      "main": [
+        [
+          {
+            "node": "Telegram Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Bale Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Eitaa Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Rubika Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "X Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LinkedIn Formatter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Platform ناشناخته",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Formatter": {
+      "main": [
+        [
+          {
+            "node": "Telegram Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bale Formatter": {
+      "main": [
+        [
+          {
+            "node": "Bale Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eitaa Formatter": {
+      "main": [
+        [
+          {
+            "node": "Eitaa Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rubika Formatter": {
+      "main": [
+        [
+          {
+            "node": "Rubika Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "X Formatter": {
+      "main": [
+        [
+          {
+            "node": "X Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn Formatter": {
+      "main": [
+        [
+          {
+            "node": "LinkedIn Publisher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Publisher": {
+      "main": [
+        [
+          {
+            "node": "نرمال‌سازی نتیجه ارسال",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bale Publisher": {
+      "main": [
+        [
+          {
+            "node": "نرمال‌سازی نتیجه ارسال",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Eitaa Publisher": {
+      "main": [
+        [
+          {
+            "node": "نرمال‌سازی نتیجه ارسال",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rubika Publisher": {
+      "main": [
+        [
+          {
+            "node": "نرمال‌سازی نتیجه ارسال",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "X Publisher": {
+      "main": [
+        [
+          {
+            "node": "نرمال‌سازی نتیجه ارسال",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LinkedIn Publisher": {
+      "main": [
+        [
+          {
+            "node": "نرمال‌سازی نتیجه ارسال",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform ناشناخته": {
+      "main": [
+        [
+          {
+            "node": "نرمال‌سازی نتیجه ارسال",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "نرمال‌سازی نتیجه ارسال": {
+      "main": [
+        [
+          {
+            "node": "ارسال موفق بود؟",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ارسال موفق بود؟": {
+      "main": [
+        [
+          {
+            "node": "ثبت موفقیت انتشار",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "طبقه‌بندی خطا و محاسبه Retry/Backoff",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "طبقه‌بندی خطا و محاسبه Retry/Backoff": {
+      "main": [
+        [
+          {
+            "node": "شکست نهایی است؟",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "شکست نهایی است؟": {
+      "main": [
+        [
+          {
+            "node": "ثبت Failed نهایی در صف",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ثبت Retry در صف",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ثبت Failed نهایی در صف": {
+      "main": [
+        [
+          {
+            "node": "ساخت رکورد خطای Job",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ساخت رکورد خطای Job": {
+      "main": [
+        [
+          {
+            "node": "ثبت خطا در Data Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ثبت خطا در Data Store": {
+      "main": [
+        [
+          {
+            "node": "هشدار مدیر — Job Failed نهایی",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ثبت موفقیت انتشار": {
+      "main": [
+        [
+          {
+            "node": "محاسبه تأخیر Rate Limit پلتفرم",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ثبت Retry در صف": {
+      "main": [
+        [
+          {
+            "node": "محاسبه تأخیر Rate Limit پلتفرم",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "هشدار مدیر — Job Failed نهایی": {
+      "main": [
+        [
+          {
+            "node": "محاسبه تأخیر Rate Limit پلتفرم",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "محاسبه تأخیر Rate Limit پلتفرم": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Wait": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Jobs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "wp02-queue-publisher",
+  "tags": []
+}

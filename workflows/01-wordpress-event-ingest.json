@@ -1,0 +1,746 @@
+{
+  "name": "WP 01 — WordPress Event Ingest + Dedup + Queue",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "wp-post-events-v1",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "w1-webhook",
+      "name": "WordPress Post Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1600,
+        0
+      ],
+      "webhookId": "wp-post-events-v1"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Event ورودی WordPress باید سبک باشد: فقط شناسه پست و نوع Event.\n// محتوای کامل بعداً از WordPress REST API واکشی می‌شود.\nconst crypto = require('crypto');\nconst req = $input.first().json;\nconst headers = req.headers || {};\nconst body = req.body ?? req;\n\n// Header رسمی و تنها مسیر Auth این پروژه (Fix #7):\n// x-omid90-webhook-secret که در پروژه قبلی استفاده می‌شد حذف شد چون این پروژه\n// هیچ نیاز Backward-Compatibility با آن سیستم ندارد و وجودش فقط سطح حمله را\n// بدون سود مستند شده افزایش می‌داد.\nconst secretHeader = headers['x-wp-webhook-secret'];\nconst secret = typeof secretHeader === 'string' ? secretHeader : '';\nconst expectedRaw = $vars.WORDPRESS_WEBHOOK_SECRET;\nconst expected = typeof expectedRaw === 'string' ? expectedRaw : '';\n\n// Fix #6: مقایسه Timing-Safe به‌جای === ساده.\n// crypto.timingSafeEqual نیاز دارد طول دو Buffer برابر باشد، وگرنه Throw می‌کند؛\n// این خودش می‌تواند یک Timing Side-channel کوچک (طول) باشد که غیرقابل‌اجتناب است\n// چون طول رشته را نمی‌توان پنهان کرد، اما محتوای رشته دیگر با مقایسه کاراکتر-به-کاراکتر\n// زودهنگام لو نمی‌رود. اگر یکی از دو مقدار خالی باشد، بدون فراخوانی crypto رد می‌شود\n// (Secret خالی هرگز نباید معتبر باشد، صرف‌نظر از پیاده‌سازی).\nfunction timingSafeStringEqual(a, b) {\n  if (typeof a !== 'string' || typeof b !== 'string') return false;\n  if (a.length === 0 || b.length === 0) return false;\n  const bufA = Buffer.from(a, 'utf8');\n  const bufB = Buffer.from(b, 'utf8');\n  if (bufA.length !== bufB.length) {\n    // برای جلوگیری از خروج زودهنگام، همچنان یک مقایسه با طول برابر (خودِ bufA) انجام می‌دهیم\n    // تا زمان اجرا مستقل از اینکه bufB کوتاه‌تر/بلندتر است تا حد ممکن یکنواخت بماند.\n    crypto.timingSafeEqual(bufA, bufA);\n    return false;\n  }\n  return crypto.timingSafeEqual(bufA, bufB);\n}\n\nconst authorized = Boolean(expected) && timingSafeStringEqual(secret, expected);\n\nconst allowedTypes = new Set(['post.published','post.updated']);\nconst eventType = String(body.eventType || body.event || '').trim();\nconst postId = Number(body.postId || body.post_id || body.ID || 0);\n\nconst payloadValid = allowedTypes.has(eventType) && Number.isInteger(postId) && postId > 0;\nconst valid = authorized && payloadValid;\n\n// Fix #15: مسیر پاسخ باید بین «احراز هویت نامعتبر» (401) و «Payload نامعتبر با Secret درست» (422)\n// تفکیک شود. outcome یکی از سه مقدار زیر است: 'ok' | 'unauthorized' | 'invalid_payload'\nlet outcome;\nif (!authorized) outcome = 'unauthorized';\nelse if (!payloadValid) outcome = 'invalid_payload';\nelse outcome = 'ok';\n\nreturn [{json:{\n  authorized, payloadValid, valid, outcome, eventType, postId,\n  receivedAt: new Date().toISOString(),\n  rawEvent: body\n}}];"
+      },
+      "id": "w1-validate",
+      "name": "اعتبارسنجی Webhook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1360,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Secret از Variable WORDPRESS_WEBHOOK_SECRET خوانده می‌شود. Header رسمی و تنها مسیر: X-WP-Webhook-Secret (Fix #6: مقایسه Timing-Safe با crypto.timingSafeEqual. Fix #7: هدر قدیمی x-omid90-webhook-secret حذف شد)."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {ok:false,code:'unauthorized',message:'Invalid or missing webhook secret'} }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "w1-resp-401",
+      "name": "پاسخ 401 غیرمجاز",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -880,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ ($vars.WORDPRESS_BASE_URL || '').replace(/\\/$/,'') }}/wp-json/wp/v2/posts/{{ $json.postId }}?_embed=1",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 15000,
+          "response": {
+            "response": {
+              "neverError": true,
+              "fullResponse": true
+            }
+          }
+        }
+      },
+      "id": "w1-fetch-post",
+      "name": "واکشی Post کامل از WordPress API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -880,
+        -60
+      ],
+      "notesInFlow": true,
+      "notes": "Authorization: Bearer WORDPRESS_API_TOKEN از طریق Credential 'WordPress API Token' (Header Auth: Authorization = Bearer <token>) تنظیم شود. neverError=true تا کد وضعیت را خودمان بررسی کنیم. Fix #1: fullResponse=true تا $json شامل {statusCode, headers, body} باشد، وگرنه $json.statusCode همیشه undefined است و شرط بعدی به‌اشتباه Fallback به 200 می‌زند.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SELECT_AFTER_IMPORT",
+          "name": "WordPress API Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.statusCode || 599 }}",
+              "rightValue": 300,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w1-if-fetch-ok",
+      "name": "واکشی موفق بود؟",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -640,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "message": "={{ 'WordPress REST API fetch failed for post ' + $('اعتبارسنجی Webhook').first().json.postId + ' — status ' + ($json.statusCode || 'unknown') }}",
+        "options": {}
+      },
+      "id": "w1-stop-error",
+      "name": "توقف با خطا (Error Workflow را فعال می‌کند)",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        -400,
+        120
+      ],
+      "notesInFlow": true,
+      "notes": "این Node اجرا را با خطا متوقف می‌کند تا در صورت انتخاب 'WP 03 — Error Handler' به‌عنوان Error Workflow در Settings، خطا ثبت و هشدار مدیر ارسال شود."
+    },
+    {
+      "parameters": {
+        "jsCode": "// نرمال‌سازی Post خام WordPress به مدل استاندارد Article.\n// هیچ Adapter پایین‌دستی نباید مستقیماً به ساختار خام WordPress وابسته باشد.\nconst wp = $input.first().json.body || $input.first().json;\nconst meta = $('اعتبارسنجی Webhook').first().json;\n\nfunction stripHtml(html){\n  return String(html||'')\n    .replace(/<[^>]*>/g,' ')\n    .replace(/&nbsp;/g,' ')\n    .replace(/&amp;/g,'&')\n    .replace(/&#8217;|&#039;/g,\"'\")\n    .replace(/&#8220;|&#8221;|&quot;/g,'\"')\n    .replace(/\\s+/g,' ')\n    .trim();\n}\n\nconst embedded = wp._embedded || {};\nconst terms = embedded['wp:term'] || [];\nconst categories = (terms[0]||[]).map(t=>t.name).filter(Boolean);\nconst tags = (terms[1]||[]).map(t=>t.name).filter(Boolean);\nconst author = (embedded.author && embedded.author[0] && embedded.author[0].name) || '';\nconst featuredMedia = embedded['wp:featuredmedia'] && embedded['wp:featuredmedia'][0];\nconst featuredImage = (featuredMedia && (featuredMedia.source_url || (featuredMedia.media_details && featuredMedia.media_details.sizes && featuredMedia.media_details.sizes.full && featuredMedia.media_details.sizes.full.source_url))) || null;\n\nconst article = {\n  postId: wp.id,\n  title: stripHtml(wp.title && wp.title.rendered),\n  content: (wp.content && wp.content.rendered) || '',\n  contentText: stripHtml(wp.content && wp.content.rendered),\n  excerpt: stripHtml(wp.excerpt && wp.excerpt.rendered),\n  url: wp.link,\n  featuredImage,\n  categories,\n  tags,\n  author,\n  publishedAt: wp.date_gmt ? wp.date_gmt + 'Z' : wp.date,\n  modifiedAt: wp.modified_gmt ? wp.modified_gmt + 'Z' : wp.modified\n};\n\n// eventId پایدار بر اساس postId + modifiedAt: هر بار محتوای پست واقعاً تغییر کند، Event جدید مجاز است؛\n// تکرار همان نسخه (همان modifiedAt) به‌عنوان Duplicate رد می‌شود.\nconst eventId = `wp:${article.postId}:${article.modifiedAt}`;\n\nreturn [{json:{\n  eventId,\n  eventType: meta.eventType,\n  entityId: String(article.postId),\n  publicationVersion: article.modifiedAt,\n  priority: 50,\n  receivedAt: meta.receivedAt,\n  article\n}}];"
+      },
+      "id": "w1-normalize",
+      "name": "Normalize Article",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -400,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_events"
+        },
+        "options": {},
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "event_id",
+              "condition": "eq",
+              "keyValue": "={{ $json.eventId }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 1
+      },
+      "id": "w1-lookup-event",
+      "name": "جستجوی eventId در Data Store",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -140
+      ],
+      "notesInFlow": true,
+      "notes": "Fix #11: فیلتر واقعی event_id = {{$json.eventId}} در Node تنظیم شد (نه فقط در Note)؛ limit=1 چون event_id یکتاست. ⚠️ ساختار دقیق پارامتر 'filters' باید بعد از Import با UI واقعی n8n Data Table تطبیق داده شود (نسخه‌های مختلف n8n ممکن است نام/شکل این پارامتر را تغییر داده باشند) — این بخش STATICALLY VERIFIED است، نه Runtime-tested."
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $('Normalize Article').first().json;\nconst rows = $input.all().map(i=>i.json).filter(Boolean);\nconst duplicate = rows.some(r => String(r.event_id || r.eventId) === event.eventId);\nreturn [{json:{...event, duplicate}}];"
+      },
+      "id": "w1-dedup",
+      "name": "تشخیص تکراری",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        80,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c3",
+              "leftValue": "={{ $json.duplicate }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w1-if-dup",
+      "name": "تکراری است؟",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        320,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {ok:true,duplicate:true,eventId:$json.eventId,publicationVersion:$json.publicationVersion} }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "w1-resp-dup",
+      "name": "پاسخ Duplicate",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        560,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_events"
+        },
+        "options": {}
+      },
+      "id": "w1-insert-event",
+      "name": "ثبت Event در Data Store",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        560,
+        -260
+      ],
+      "notesInFlow": true,
+      "notes": "جدول omid90_events — ستون‌ها: event_id, event_type, entity_id, status(accepted), priority, publication_version, received_at, payload_json, last_error, retry_count(0). Fix #10: UNIQUE(event_id) باید در سطح دیتابیس واقعی Data Table تنظیم شود (این فایل فقط می‌تواند Insert را با onError=continueRegularOutput پیکربندی کند تا در صورت Violation، اجرا Crash نکند؛ ادعا نمی‌کنیم Constraint از این JSON به‌خودی‌خود ایجاد می‌شود). ⚠️ BLOCKED: تایید واقعی این رفتار فقط با یک نمونه n8n واقعی و دو Request هم‌زمان ممکن است (به FINAL-AUDIT.md مراجعه شود).",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e = $('تشخیص تکراری').first().json;\nconst activeRaw = $vars.ACTIVE_PLATFORMS || 'telegram,bale,eitaa,rubika,x,linkedin';\nconst platforms = activeRaw.split(',').map(s=>s.trim()).filter(Boolean);\n\nreturn platforms.map(platform => ({json:{\n  job_id: `${e.article.postId}:${platform}:${e.publicationVersion}`,\n  event_id: e.eventId,\n  event_type: e.eventType,\n  platform,\n  status: 'pending',\n  priority: e.priority,\n  attempts: 0,\n  max_attempts: 5,\n  next_attempt_at: new Date().toISOString(),\n  article_json: JSON.stringify(e.article),\n  created_at: new Date().toISOString()\n}}));"
+      },
+      "id": "w1-build-jobs",
+      "name": "ساخت Publication Job برای هر پلتفرم",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -260
+      ],
+      "notesInFlow": true,
+      "notes": "ACTIVE_PLATFORMS از Variables خوانده می‌شود، مثال: telegram,bale,eitaa,rubika,x,linkedin\njob_id = postId:platform:publicationVersion برای Idempotency."
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_publish_queue"
+        },
+        "options": {}
+      },
+      "id": "w1-insert-jobs",
+      "name": "ثبت Jobها در صف Data Store",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        -260
+      ],
+      "notesInFlow": true,
+      "notes": "جدول omid90_publish_queue — روی job_id در صورت امکان Unique Constraint بگذارید."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {ok:true, accepted:$json.accepted, eventId:$json.eventId, jobsCreated:$json.jobsCreated} }}",
+        "options": {
+          "responseCode": 202
+        }
+      },
+      "id": "w1-resp-accepted",
+      "name": "پاسخ Accepted",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        1520,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "o1",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "ok",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "o2",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "unauthorized",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "o3",
+                    "leftValue": "={{ $json.outcome }}",
+                    "rightValue": "invalid_payload",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "id": "w1-switch-outcome",
+      "name": "طبقه‌بندی نتیجه اعتبارسنجی",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        -1120,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "خروجی 0=ok (ادامه)، 1=unauthorized (401)، 2=invalid_payload (422)، Fallback=غیرمنتظره (401 امن)."
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {ok:false,code:'invalid_payload',message:'Authenticated but eventType/postId invalid'} }}",
+        "options": {
+          "responseCode": 422
+        }
+      },
+      "id": "w1-resp-422",
+      "name": "پاسخ 422 Payload نامعتبر",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -880,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fix #1: نرمال‌سازی خروجی HTTP Request (که اکنون fullResponse=true دارد) به شکل یکنواخت\n// {statusCode, body} برای Nodeهای بعدی، مستقل از این‌که n8n دقیقاً چه شکلی برمی‌گرداند.\nconst raw = $input.first().json;\nconst statusCode = Number(raw.statusCode ?? (raw.body && raw.body.statusCode) ?? 599);\nconst body = raw.body !== undefined ? raw.body : raw;\nreturn [{json:{statusCode, body}}];"
+      },
+      "id": "w1-fetch-prep",
+      "name": "یکنواخت‌سازی پاسخ WordPress",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -760,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fix #10: راهکار عملی برای Race Condition در Dedup سطح Event.\n// اگر Insert به دلیل نقض UNIQUE(event_id) با خطا مواجه شود و Node با onError=continueRegularOutput پیکربندی شده باشد،\n// n8n معمولاً همان Item ورودی را همراه با یک فیلد error در خروجی برمی‌گرداند (شکل دقیق بسته به نسخه n8n متفاوت است؛\n// این کد چند شکل رایج را پوشش می‌دهد). اگر خطای Insert تشخیص داده شود، همان رویداد را «تکراری» در نظر می‌گیریم\n// (چون تنها دلیل معقول شکست Insert روی event_id یکتا، وجود قبلی همان ردیف در یک اجرای هم‌زمان دیگر است) و به‌جای\n// ادامه، مسیر Duplicate را دنبال می‌کنیم — نه اینکه فرض کنیم Insert همیشه موفق بوده (باگ قبلی).\nconst item = $input.first().json;\nconst event = $('تشخیص تکراری').first().json;\n\nconst looksLikeError = Boolean(\n  item.error ||\n  item.json?.error ||\n  (typeof item.message === 'string' && /unique|duplicate|constraint/i.test(item.message))\n);\n\nreturn [{json:{...event, insertRaceDetected: looksLikeError}}];"
+      },
+      "id": "w1-insert-check",
+      "name": "بررسی نتیجه ثبت Event (Race Detection)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        -140
+      ],
+      "notesInFlow": true,
+      "notes": "Fix #10: mitigation عملی، نه اثبات Atomicity. جزئیات و محدودیت‌ها در FINAL-AUDIT.md ثبت شده."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "r1",
+              "leftValue": "={{ $json.insertRaceDetected }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "w1-if-race",
+      "name": "Race تشخیص داده شد؟",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1000,
+        -140
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fix #3: respondToWebhook فقط باید یک‌بار و با یک Item اجرا شود.\n// «ساخت Publication Job برای هر پلتفرم» به تعداد پلتفرم‌های فعال Item جدا تولید می‌کند؛\n// این Node همه آن Itemها را جمع می‌کند و یک خروجی واحد می‌سازد.\nconst items = $input.all();\nconst jobsCreated = items.length;\nconst eventId = items[0]?.json?.event_id || $('تشخیص تکراری').first().json.eventId;\nreturn [{json:{ accepted: true, eventId, jobsCreated }}];"
+      },
+      "id": "w1-aggregate-jobs",
+      "name": "تجمیع نتیجه Jobها",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        -260
+      ],
+      "notesInFlow": true,
+      "notes": "Fix #3: از $input.all().length برای شمارش واقعی Jobها استفاده می‌شود، نه $json.length روی یک Item."
+    }
+  ],
+  "connections": {
+    "WordPress Post Webhook": {
+      "main": [
+        [
+          {
+            "node": "اعتبارسنجی Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "اعتبارسنجی Webhook": {
+      "main": [
+        [
+          {
+            "node": "طبقه‌بندی نتیجه اعتبارسنجی",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "طبقه‌بندی نتیجه اعتبارسنجی": {
+      "main": [
+        [
+          {
+            "node": "واکشی Post کامل از WordPress API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "پاسخ 401 غیرمجاز",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "پاسخ 422 Payload نامعتبر",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "پاسخ 401 غیرمجاز",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "واکشی Post کامل از WordPress API": {
+      "main": [
+        [
+          {
+            "node": "یکنواخت‌سازی پاسخ WordPress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "یکنواخت‌سازی پاسخ WordPress": {
+      "main": [
+        [
+          {
+            "node": "واکشی موفق بود؟",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "واکشی موفق بود؟": {
+      "main": [
+        [
+          {
+            "node": "Normalize Article",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "توقف با خطا (Error Workflow را فعال می‌کند)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Article": {
+      "main": [
+        [
+          {
+            "node": "جستجوی eventId در Data Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "جستجوی eventId در Data Store": {
+      "main": [
+        [
+          {
+            "node": "تشخیص تکراری",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "تشخیص تکراری": {
+      "main": [
+        [
+          {
+            "node": "تکراری است؟",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "تکراری است؟": {
+      "main": [
+        [
+          {
+            "node": "پاسخ Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ثبت Event در Data Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ثبت Event در Data Store": {
+      "main": [
+        [
+          {
+            "node": "بررسی نتیجه ثبت Event (Race Detection)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "بررسی نتیجه ثبت Event (Race Detection)": {
+      "main": [
+        [
+          {
+            "node": "Race تشخیص داده شد؟",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Race تشخیص داده شد؟": {
+      "main": [
+        [
+          {
+            "node": "پاسخ Duplicate",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ساخت Publication Job برای هر پلتفرم",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ساخت Publication Job برای هر پلتفرم": {
+      "main": [
+        [
+          {
+            "node": "ثبت Jobها در صف Data Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ثبت Jobها در صف Data Store": {
+      "main": [
+        [
+          {
+            "node": "تجمیع نتیجه Jobها",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "تجمیع نتیجه Jobها": {
+      "main": [
+        [
+          {
+            "node": "پاسخ Accepted",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "wp01-event-ingest",
+  "tags": []
+}

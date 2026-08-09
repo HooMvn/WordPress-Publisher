@@ -1,0 +1,2 @@
+﻿job_id,event_id,event_type,platform,status,priority,attempts,max_attempts,next_attempt_at,article_json,created_at,started_at,sent_at,worker_id,provider_status_code,provider_response_json,last_error
+555:telegram:2026-08-01T10:00:00Z,wp:555:2026-08-01T10:00:00Z,post.published,telegram,sent,50,1,5,2026-08-01T10:00:10Z,"{""postId"":555,""title"":""نمونه عنوان مقاله"",""url"":""https://example.com/post/555""}",2026-08-01T10:00:05Z,2026-08-01T10:00:08Z,2026-08-01T10:00:09Z,exec-10234,200,"{""ok"":true,""result"":{""message_id"":123}}",

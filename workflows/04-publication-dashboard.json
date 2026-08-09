@@ -1,0 +1,326 @@
+{
+  "name": "WP 04 — Publication Dashboard API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "wp-publication-dashboard",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d-webhook",
+      "name": "Dashboard API",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -900,
+        0
+      ],
+      "webhookId": "wp-publication-dashboard"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_events"
+        },
+        "options": {},
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "received_at",
+              "condition": "gte",
+              "keyValue": "={{ $now.minus({days:30}).toISO() }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 2000
+      },
+      "id": "d-read-events",
+      "name": "خواندن Events",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -160
+      ],
+      "notesInFlow": true,
+      "notes": "Fix #11: تلاش برای فیلتر سمت Data Table روی received_at >= 30 روز قبل. ⚠️ اگر عملگر 'gte' روی این نسخه Data Table پشتیبانی نشود، فیلتر سمت Code Node در «محاسبه KPI انتشار» به‌عنوان مرجع نهایی و تضمین‌شده عمل می‌کند (STATICALLY VERIFIED — نیازمند تایید با نمونه واقعی n8n)."
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_publish_queue"
+        },
+        "options": {},
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "created_at",
+              "condition": "gte",
+              "keyValue": "={{ $now.minus({days:30}).toISO() }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 2000
+      },
+      "id": "d-read-queue",
+      "name": "خواندن Queue",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Fix #11: تلاش برای فیلتر سمت Data Table روی created_at >= 30 روز قبل. ⚠️ اگر عملگر 'gte' روی این نسخه Data Table پشتیبانی نشود، فیلتر سمت Code Node در «محاسبه KPI انتشار» به‌عنوان مرجع نهایی و تضمین‌شده عمل می‌کند (STATICALLY VERIFIED — نیازمند تایید با نمونه واقعی n8n)."
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_errors"
+        },
+        "options": {},
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "occurred_at",
+              "condition": "gte",
+              "keyValue": "={{ $now.minus({days:30}).toISO() }}"
+            }
+          ]
+        },
+        "returnAll": false,
+        "limit": 2000
+      },
+      "id": "d-read-errors",
+      "name": "خواندن Errors",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        160
+      ],
+      "notesInFlow": true,
+      "notes": "Fix #11: تلاش برای فیلتر سمت Data Table روی occurred_at >= 30 روز قبل. ⚠️ اگر عملگر 'gte' روی این نسخه Data Table پشتیبانی نشود، فیلتر سمت Code Node در «محاسبه KPI انتشار» به‌عنوان مرجع نهایی و تضمین‌شده عمل می‌کند (STATICALLY VERIFIED — نیازمند تایید با نمونه واقعی n8n)."
+    },
+    {
+      "parameters": {
+        "jsCode": "const cutoff = Date.now() - 30*24*60*60*1000;\nconst within30 = (dateStr) => {\n  if (!dateStr) return false;\n  const t = new Date(dateStr).getTime();\n  return Number.isFinite(t) && t >= cutoff;\n};\n\n// Fix #11: فیلتر ۳۰ روز اخیر همیشه اینجا (Code Node) به‌صورت تضمین‌شده اعمال می‌شود،\n// مستقل از این‌که فیلتر سمت Data Table پشتیبانی شود یا نه.\nconst events = $('خواندن Events').all().map(i=>i.json).filter(e => within30(e.received_at));\nconst queue = $('خواندن Queue').all().map(i=>i.json).filter(j => within30(j.created_at));\nconst errors = $('خواندن Errors').all().map(i=>i.json).filter(e => within30(e.occurred_at));\n\nconst byStatus={}, byPlatform={}, byDate={};\nfor(const j of queue){\n  const st=j.status||'unknown';\n  byStatus[st]=(byStatus[st]||0)+1;\n  const pf=j.platform||'unknown';\n  byPlatform[pf]=(byPlatform[pf]||0)+1;\n  const d=(j.created_at||'').slice(0,10);\n  if(d){ byDate[d]=(byDate[d]||0)+1; }\n}\nconst sent=byStatus.sent||0, failed=byStatus.failed||0, pending=byStatus.pending||0, processing=byStatus.processing||0;\nconst retrying = queue.filter(j=>j.status==='pending' && Number(j.attempts||0)>0).length;\nconst finished = sent+failed;\nconst successRate = finished ? Math.round(sent*10000/finished)/100 : 100;\n\nconst latencies = queue.filter(j=>j.sent_at && j.started_at).map(j=> new Date(j.sent_at)-new Date(j.started_at));\nconst avgLatencyMs = latencies.length ? Math.round(latencies.reduce((a,b)=>a+b,0)/latencies.length) : null;\n\nreturn [{json:{\n  generatedAt:new Date().toISOString(),\n  windowDays: 30,\n  summary:{\n    totalArticles: events.length,\n    totalJobs: queue.length,\n    pending, processing, sent, failed, retrying,\n    successRate,\n    avgLatencyMs,\n    openErrors: errors.filter(e=>(e.status||'open')==='open').length\n  },\n  byStatus, byPlatform, byDate,\n  recentPublications: queue.filter(j=>j.status==='sent').slice(-20).reverse(),\n  recentFailures: queue.filter(j=>j.status==='failed').slice(-20).reverse(),\n  recentErrors: errors.slice(-20).reverse()\n}}];"
+      },
+      "id": "d-kpi",
+      "name": "محاسبه KPI انتشار",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "d-respond",
+      "name": "پاسخ داشبورد",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -120,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fix #4: Dashboard API قبلاً کاملاً بدون Authentication بود. اکنون یک Secret مستقل\n// (DASHBOARD_API_SECRET) از Header الزامی است، جدا از WORDPRESS_WEBHOOK_SECRET، چون این دو\n// مسیر مصرف‌کننده متفاوتی دارند (WordPress در برابر مدیر/مانیتورینگ).\nconst crypto = require('crypto');\nconst req = $input.first().json;\nconst headers = req.headers || {};\n\nconst provided = typeof headers['x-dashboard-api-secret'] === 'string' ? headers['x-dashboard-api-secret'] : '';\nconst expected = typeof $vars.DASHBOARD_API_SECRET === 'string' ? $vars.DASHBOARD_API_SECRET : '';\n\nfunction timingSafeStringEqual(a, b) {\n  if (typeof a !== 'string' || typeof b !== 'string') return false;\n  if (a.length === 0 || b.length === 0) return false;\n  const bufA = Buffer.from(a, 'utf8');\n  const bufB = Buffer.from(b, 'utf8');\n  if (bufA.length !== bufB.length) {\n    crypto.timingSafeEqual(bufA, bufA);\n    return false;\n  }\n  return crypto.timingSafeEqual(bufA, bufB);\n}\n\nconst authorized = Boolean(expected) && timingSafeStringEqual(provided, expected);\nreturn [{json:{authorized}}];"
+      },
+      "id": "d-auth",
+      "name": "اعتبارسنجی Dashboard Secret",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1140,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "Fix #4: هدر الزامی x-dashboard-api-secret، مقایسه Timing-Safe (مطابق Fix #6). Secret در Variable DASHBOARD_API_SECRET."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "da1",
+              "leftValue": "={{ $json.authorized }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d-if-auth",
+      "name": "معتبر است؟",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        -900,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {ok:false,message:'Unauthorized: missing or invalid x-dashboard-api-secret'} }}",
+        "options": {
+          "responseCode": 401
+        }
+      },
+      "id": "d-resp-401",
+      "name": "پاسخ 401",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -900,
+        220
+      ]
+    }
+  ],
+  "connections": {
+    "Dashboard API": {
+      "main": [
+        [
+          {
+            "node": "اعتبارسنجی Dashboard Secret",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "اعتبارسنجی Dashboard Secret": {
+      "main": [
+        [
+          {
+            "node": "معتبر است؟",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "معتبر است؟": {
+      "main": [
+        [
+          {
+            "node": "خواندن Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "خواندن Queue",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "خواندن Errors",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "پاسخ 401",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "خواندن Events": {
+      "main": [
+        [
+          {
+            "node": "محاسبه KPI انتشار",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "خواندن Queue": {
+      "main": [
+        [
+          {
+            "node": "محاسبه KPI انتشار",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "خواندن Errors": {
+      "main": [
+        [
+          {
+            "node": "محاسبه KPI انتشار",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "محاسبه KPI انتشار": {
+      "main": [
+        [
+          {
+            "node": "پاسخ داشبورد",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "wp04-dashboard",
+  "tags": []
+}

@@ -1,0 +1,8 @@
+{
+  "description": "همان Event بالا دوباره ارسال می‌شود (همان postId، بدون تغییر واقعی پست در WordPress) -> باید duplicate:true برگرداند",
+  "method": "POST",
+  "path": "/webhook/wp-post-events-v1",
+  "headers": { "X-WP-Webhook-Secret": "${WORDPRESS_WEBHOOK_SECRET}", "Content-Type": "application/json" },
+  "body": { "eventType": "post.published", "postId": 555 },
+  "expected": { "status": 200, "duplicate": true }
+}

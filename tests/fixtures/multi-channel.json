@@ -1,0 +1,8 @@
+{
+  "description": "یک Event معتبر با ACTIVE_PLATFORMS=telegram,bale,eitaa,rubika,x,linkedin -> باید ۶ Job مستقل بسازد (Fix #3: jobsCreated=6 دقیق)",
+  "method": "POST",
+  "path": "/webhook/wp-post-events-v1",
+  "headers": { "X-WP-Webhook-Secret": "${WORDPRESS_WEBHOOK_SECRET}", "Content-Type": "application/json" },
+  "body": { "eventType": "post.published", "postId": 777 },
+  "expected": { "status": 202, "jobsCreated": 6 }
+}

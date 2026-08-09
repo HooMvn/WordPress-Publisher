@@ -1,0 +1,169 @@
+{
+  "name": "WP 03 — Error Handler + Admin Alert",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "e-trigger",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const e=$input.first().json;\nreturn [{json:{\n  error_id:`err:${Date.now()}:${Math.random().toString(36).slice(2,8)}`,\n  workflow_id:e.workflow?.id||'',\n  workflow_name:e.workflow?.name||'',\n  execution_id:e.execution?.id||'',\n  execution_url:e.execution?.url||'',\n  node_name:e.execution?.lastNodeExecuted||'',\n  error_message:e.execution?.error?.message||e.error?.message||'Unknown error',\n  stack:e.execution?.error?.stack||'',\n  severity:'high',\n  status:'open',\n  occurred_at:new Date().toISOString()\n}}];"
+      },
+      "id": "e-normalize",
+      "name": "نرمال‌سازی خطا",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_errors"
+        },
+        "options": {}
+      },
+      "id": "e-insert",
+      "name": "ثبت خطا در Data Store",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "جدول omid90_errors:\nerror_id,workflow_id,workflow_name,execution_id,node_name,error_message,stack,severity,status,occurred_at,resolved_at"
+    },
+    {
+      "parameters": {
+        "jsCode": "const e=$input.first().json;\nconst text=[\n '🚨 خطای اتوماسیون WordPress → Social Publisher',\n `Workflow: ${e.workflow_name}`,\n `Node: ${e.node_name}`,\n `Message: ${e.error_message}`,\n e.execution_url?`Execution: ${e.execution_url}`:'',\n `Time: ${e.occurred_at}`\n].filter(Boolean).join('\\n');\nreturn [{json:{...e,alertText:text}}];"
+      },
+      "id": "e-build-alert",
+      "name": "ساخت هشدار مدیریتی",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -80,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $vars.ADMIN_ALERT_ENDPOINT }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({chat_id:$vars.ADMIN_ALERT_CHAT_ID,text:$json.alertText}) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          }
+        }
+      },
+      "id": "e-alert-send",
+      "name": "ارسال هشدار مدیر",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        180,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "notesInFlow": true,
+      "notes": "کانال هشدار مستقل از پلتفرم‌های انتشار است؛ می‌تواند تلگرام، Slack، Email Gateway یا هر Webhook دیگری باشد که در ADMIN_ALERT_ENDPOINT تنظیم شده.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "SELECT_AFTER_IMPORT",
+          "name": "WP Admin Alert Credential"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "نرمال‌سازی خطا",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "نرمال‌سازی خطا": {
+      "main": [
+        [
+          {
+            "node": "ثبت خطا در Data Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ثبت خطا در Data Store": {
+      "main": [
+        [
+          {
+            "node": "ساخت هشدار مدیریتی",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ساخت هشدار مدیریتی": {
+      "main": [
+        [
+          {
+            "node": "ارسال هشدار مدیر",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "wp03-error-handler",
+  "tags": []
+}

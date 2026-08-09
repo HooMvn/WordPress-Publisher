@@ -1,0 +1,2 @@
+﻿error_id,workflow_id,workflow_name,execution_id,node_name,error_message,stack,severity,status,occurred_at,resolved_at,job_id,platform
+err:1754680800000:a1b2c3,wp02-queue-publisher,WP 02 — Queue Publisher + Platform Adapters,exec-10234,ارسال telegram,"HTTP 401 — {""ok"":false,""error"":""[REDACTED]""}",,high,open,2026-08-01T10:00:12Z,,555:telegram:2026-08-01T10:00:00Z,telegram

@@ -1,0 +1,2 @@
+﻿event_id,event_type,entity_id,status,priority,publication_version,received_at,payload_json,last_error,retry_count
+wp:555:2026-08-01T10:00:00Z,post.published,555,accepted,50,2026-08-01T10:00:00Z,2026-08-01T10:00:05Z,"{""postId"":555,""title"":""نمونه عنوان مقاله"",""url"":""https://example.com/post/555""}",,0

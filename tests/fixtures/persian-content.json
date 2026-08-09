@@ -1,0 +1,12 @@
+{
+  "description": "پست وردپرس با محتوای کاملاً فارسی + ایموجی، برای تست stripHtml/Formatter (T31-T33)",
+  "wpRestResponseSample": {
+    "id": 999,
+    "title": { "rendered": "🎉 خبر ویژه &#8220;فناوری&#8221; امروز" },
+    "content": { "rendered": "<p>این یک <strong>خبر</strong> کاملاً فارسی با ایموجی 🚀 و پاراگراف دوم است.</p>" },
+    "excerpt": { "rendered": "<p>خلاصه فارسی با علامت‌های خاص: &nbsp; &amp; &#039;تست&#039;</p>" },
+    "link": "https://example.com/post/999",
+    "date_gmt": "2026-08-05T08:30:00",
+    "modified_gmt": "2026-08-05T08:30:00"
+  }
+}

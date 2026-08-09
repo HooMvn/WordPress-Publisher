@@ -1,0 +1,5 @@
+{
+  "description": "شبیه‌سازی تیک زمان‌بندی‌شده Workflow 02 (هر ۱ دقیقه) روی صف با ۸۰ Job Pending -> فقط ۵۰ تای اول طبق priority/created_at پردازش شوند (Fix #11/#23)",
+  "queueSizeBeforeRun": 80,
+  "expected": { "processedThisTick": 50, "remainingPendingAfterTick": 30 }
+}

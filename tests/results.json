@@ -1,0 +1,748 @@
+[
+  {
+    "name": "STATIC: fullResponse=true on WP fetch node",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: IF node no longer falls back to 200",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T01 WordPress 200 -> success",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T01b WordPress 201 -> success",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T01c WordPress 204 -> success",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T02 WordPress 404 -> failure",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T03 WordPress 401 -> failure",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T04 WordPress 500 -> failure",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T04b Missing statusCode entirely -> failure (not silently 200)",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T30 missing secret -> outcome=unauthorized",
+    "expected": "unauthorized",
+    "actual": "unauthorized",
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T30b wrong secret -> outcome=unauthorized",
+    "expected": "unauthorized",
+    "actual": "unauthorized",
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T29 valid auth + invalid eventType -> outcome=invalid_payload",
+    "expected": "invalid_payload",
+    "actual": "invalid_payload",
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T29b valid auth + missing postId -> outcome=invalid_payload",
+    "expected": "invalid_payload",
+    "actual": "invalid_payload",
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T ok path -> outcome=ok",
+    "expected": "ok",
+    "actual": "ok",
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: dedicated 422 response node exists with code 422",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: dedicated 401 response node exists with code 401",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: legacy x-omid90-webhook-secret header no longer read (only mentioned in a removal comment, if at all)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: uses crypto.timingSafeEqual",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T13 correct secret -> authorized=true",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T14 wrong secret (same length) -> authorized=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T15 empty secret header -> authorized=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T15c missing expected secret (empty var) -> authorized=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T different-length secret -> authorized=false (no throw)",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T non-string header value -> authorized=false (no throw)",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T16 legacy header alone -> authorized=false (removed)",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T31 Persian content normalized correctly",
+    "expected": "عنوان \"تست\" مقاله",
+    "actual": "عنوان \"تست\" مقاله",
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T31b Persian content preserved (no mangled chars)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T19a Sequential: first request -> duplicate=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T19b Sequential: second request (row now exists) -> duplicate=true",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T20 Concurrent race window: both workers see duplicate=false at read time (expected TOCTOU)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": "This demonstrates WHY Fix #10 (race detection on insert) is necessary — the code-node read step alone cannot prevent the race."
+  },
+  {
+    "name": "T20b Fix#10: insert failure due to UNIQUE violation -> insertRaceDetected=true (treated as duplicate)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T20c Fix#10: successful insert -> insertRaceDetected=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T07 Respond aggregation: 1 platform -> jobsCreated=1, single item out",
+    "expected": 1,
+    "actual": 1,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T07b aggregation always returns exactly 1 item",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T08a Respond aggregation: 2 platforms -> jobsCreated=2",
+    "expected": 2,
+    "actual": 2,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T08b Respond aggregation: 6 platforms -> jobsCreated=6",
+    "expected": 6,
+    "actual": 6,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T08c aggregation always returns exactly 1 item even with 6 jobs",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T34 Multi-channel: all 6 job_ids unique",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T06 Known platform (telegram) success -> ok=true",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T05 Unknown platform -> delivery.ok stays false (regression guard for old bug)",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T05b Unknown platform -> permanent=true preserved",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T27 401 -> ok=false, permanent=true, classification=permanent",
+    "expected": {
+      "ok": false,
+      "permanent": true,
+      "classification": "permanent"
+    },
+    "actual": {
+      "ok": false,
+      "permanent": true,
+      "classification": "permanent"
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T28 429 -> ok=false, permanent=false, classification=temporary",
+    "expected": {
+      "ok": false,
+      "permanent": false,
+      "classification": "temporary"
+    },
+    "actual": {
+      "ok": false,
+      "permanent": false,
+      "classification": "temporary"
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T28b 500 -> classification=temporary",
+    "expected": "temporary",
+    "actual": "temporary",
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "Fix#14 Unmapped code 418 -> classification=unknown, permanent=false (safe retry default)",
+    "expected": {
+      "permanent": false,
+      "classification": "unknown"
+    },
+    "actual": {
+      "permanent": false,
+      "classification": "unknown"
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: temporaryCodes variable actually used in logic (Fix #14)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T12a Redaction: top-level Token key redacted (case-insensitive)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T12b Redaction: nested Authorization key redacted",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T12c Redaction: deeply nested cookie key redacted",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T12d Redaction: secret inside array element redacted",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T12e Redaction: safe field preserved untouched",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T12f Redaction: does not corrupt statusCode used for ok/permanent computation",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "Fix#10 Lock verify: worker won race (status=processing) -> locked=true",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "Fix#10 Lock verify: worker lost race (0 rows updated) -> locked=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "Fix#10 Lock verify never throws / always returns exactly one item",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T17 STATIC: Telegram Publisher uses official n8n-nodes-base.telegram node",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T17b STATIC: no direct $credentials.* access in any node parameters/expressions (mentions in notes are fine)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T18 STATIC: Telegram node references a credential (not inline token)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T26 STATIC: X Publisher URL derived from $vars.X_API_BASE",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T26b STATIC: X Publisher URL genuinely reads the variable (not just a comment)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T32 X tweet stays <= 280 chars with long Persian title",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T32b Telegram formatter preserves emoji",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T33 Telegram formatter preserves newlines",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T09 dashboard correct secret -> authorized=true",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T10 dashboard wrong secret -> authorized=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T11 dashboard missing secret -> authorized=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: auth node connected first from webhook trigger",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: 401 response node exists on dashboard",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T21 STATIC: event lookup has event_id filter + limit",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T22 STATIC: pending queue read has status=pending filter",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T22b STATIC: code-level next_attempt_at<=now filter present (Data Table cannot filter against dynamic \"now\")",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T23 STATIC: queue limited to 50 in code",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: ordering by priority ASC, created_at ASC",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T24 STATIC: dashboard events read has 30-day filter + limit",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T24 STATIC: dashboard queue read has 30-day filter + limit",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T24 STATIC: dashboard errors read has 30-day filter + limit",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T25a docker-compose: EXECUTIONS_DATA_SAVE_ON_SUCCESS=none",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T25b docker-compose: EXECUTIONS_DATA_SAVE_ON_ERROR=all",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T25c wf01 settings.saveDataSuccessExecution=none (matches docker-compose)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T25d wf01 settings.saveDataErrorExecution=all",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T25c wf02 settings.saveDataSuccessExecution=none (matches docker-compose)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T25d wf02 settings.saveDataErrorExecution=all",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T25c wf03 settings.saveDataSuccessExecution=none (matches docker-compose)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T25d wf03 settings.saveDataErrorExecution=all",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T25c wf04 settings.saveDataSuccessExecution=none (matches docker-compose)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T25d wf04 settings.saveDataErrorExecution=all",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: n8n image line is not :latest",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "STATIC: n8n image has an explicit version tag",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "Dashboard KPI totals (regression, within 30-day window)",
+    "expected": {
+      "totalArticles": 2,
+      "totalJobs": 3,
+      "sent": 1,
+      "failed": 1,
+      "pending": 1,
+      "openErrors": 1,
+      "successRate": 50
+    },
+    "actual": {
+      "totalArticles": 2,
+      "totalJobs": 3,
+      "sent": 1,
+      "failed": 1,
+      "pending": 1,
+      "openErrors": 1,
+      "successRate": 50
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T24b Records older than 30 days excluded from KPI (code-side guarantee)",
+    "expected": {
+      "totalArticles": 0,
+      "totalJobs": 0,
+      "openErrors": 0
+    },
+    "actual": {
+      "totalArticles": 0,
+      "totalJobs": 0,
+      "openErrors": 0
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T35a E2E: webhook validated",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T35b E2E: WP fetch normalized to success",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T35c E2E: article normalized with correct postId",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T35d E2E: new article not duplicate",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T35e E2E: 2 jobs created for telegram,x",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T35f E2E: aggregated response jobsCreated=2",
+    "expected": 2,
+    "actual": 2,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T35g E2E: telegram job delivered ok",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T35h E2E: x job fails permanently (403)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T35i E2E: x job marked finalFailed (permanent, no retry)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T35j E2E: telegram job unaffected by x job failure (independent rows)",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  }
+]

@@ -1,0 +1,8 @@
+{
+  "description": "یک Event معتبر post.published — با X-WP-Webhook-Secret درست",
+  "method": "POST",
+  "path": "/webhook/wp-post-events-v1",
+  "headers": { "X-WP-Webhook-Secret": "${WORDPRESS_WEBHOOK_SECRET}", "Content-Type": "application/json" },
+  "body": { "eventType": "post.published", "postId": 555 },
+  "expected": { "statusRange": [200, 202], "ok": true }
+}
