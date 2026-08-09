@@ -42,7 +42,7 @@ x-n8n-common: &n8n-common
     redis:
       condition: service_healthy
   networks:
-    - omid90_n8n_private
+    - wordpress-publisher_n8n_private
 
 services:
   postgres:
@@ -60,7 +60,7 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - omid90_n8n_private
+      - wordpress-publisher_n8n_private
 
   redis:
     image: redis:7-alpine
@@ -74,7 +74,7 @@ services:
       timeout: 5s
       retries: 10
     networks:
-      - omid90_n8n_private
+      - wordpress-publisher_n8n_private
 
   n8n-main:
     <<: *n8n-common
@@ -103,5 +103,5 @@ volumes:
   n8n_data:
 
 networks:
-  omid90_n8n_private:
+  wordpress-publisher_n8n_private:
     driver: bridge
