@@ -4,7 +4,7 @@
 
 ---
 
-## `omid90_events`
+## `wordpress-publisher_events`
 
 هدف: ثبت هر Event WordPress و Deduplication در سطح مقاله.
 
@@ -25,14 +25,14 @@
 
 ---
 
-## `omid90_publish_queue`
+## `wordpress-publisher_publish_queue`
 
 هدف: صف انتشار، وضعیت هر پلتفرم، Retry.
 
 | ستون | نوع | توضیح |
 |---|---|---|
 | `job_id` | Text (**Unique**) | `{postId}:{platform}:{publicationVersion}` |
-| `event_id` | Text | ارجاع به `omid90_events.event_id` |
+| `event_id` | Text | ارجاع به `wordpress-publisher_events.event_id` |
 | `event_type` | Text | |
 | `platform` | Text | `telegram` / `bale` / `eitaa` / `rubika` / `x` / `linkedin` / آینده |
 | `status` | Text | `pending` / `processing` / `retry_wait` / `sent` / `failed` / `skipped` |
@@ -53,7 +53,7 @@
 
 ---
 
-## `omid90_errors`
+## `wordpress-publisher_errors`
 
 هدف: خطاهای فنی Workflow (از `errorTrigger`) و شکست نهایی Jobها.
 
