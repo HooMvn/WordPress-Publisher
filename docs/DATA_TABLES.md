@@ -4,7 +4,7 @@
 
 ---
 
-## `omid90_events`
+## `wordpress-publisher_events`
 
 هدف: ثبت هر Event WordPress و Deduplication در سطح مقاله.
 
@@ -25,7 +25,7 @@
 
 ---
 
-## `omid90_publish_queue`
+## `wordpress-publisher_publish_queue`
 
 هدف: صف انتشار، وضعیت هر پلتفرم، Retry.
 
@@ -53,7 +53,7 @@
 
 ---
 
-## `omid90_errors`
+## `wordpress-publisher_errors`
 
 هدف: خطاهای فنی Workflow (از `errorTrigger`) و شکست نهایی Jobها.
 
@@ -92,7 +92,7 @@
 1. این‌که n8n Data Table Node واقعاً از یک قید `UNIQUE` سطح دیتابیس با خطای قابل‌تشخیص در خروجی
    Node پشتیبانی می‌کند یا نه، **فقط با یک نمونه n8n واقعی قابل تایید است** (این محیط توسعه به
    n8n/Docker دسترسی ندارد). اگر پشتیبانی می‌کند، آن را روی هر دو ستون `event_id` (جدول
-   `omid90_events`) و `job_id` (جدول `omid90_publish_queue`) تنظیم کنید.
+   `wordpress-publisher_events`) و `job_id` (جدول `wordpress-publisher_publish_queue`) تنظیم کنید.
 2. مستقل از این‌که آن قید واقعاً در دسترس است یا نه، این پروژه دو لایه Mitigation در سطح Workflow
    اضافه کرده که بدون تکیه بر رفتار خاص Data Table کار می‌کنند:
    - **Workflow 01** — Node «ثبت Event در Data Store» با `onError: continueRegularOutput` اجرا
