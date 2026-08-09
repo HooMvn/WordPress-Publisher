@@ -10,7 +10,7 @@
 
 ### Reuse می‌شود (بدون تغییر معنایی)
 - الگوی کلی معماری: `Ingest → Dedup (Data Store + Unique Constraint) → Job per Channel → Queue → Worker → Retry/Backoff → Callback/Log → Dashboard`.
-- Error Workflow جداگانه با `errorTrigger`، ثبت در `omid90_errors`، هشدار مدیر.
+- Error Workflow جداگانه با `errorTrigger`، ثبت در `wordpress-publisher_errors`، هشدار مدیر.
 - الگوی سه جدول Data Store: `events` / `publish_queue` / `errors`.
 - زیرساخت Docker (n8n Main + Worker + Redis + Postgres، Queue Mode) — بدون هیچ تغییری قابل استفاده است.
 - الگوی Retry با Exponential Backoff و سقف Max Attempts.
@@ -49,7 +49,7 @@ WordPress (post.published / post.updated)
 │  → normalize Article → dedup             │
 │  → create N Publication Jobs (1/platform)│
 └─────────────────────────────────────────┘
-        │ omid90_events / omid90_publish_queue (Data Store)
+        │ wordpress-publisher_events / wordpress-publisher_publish_queue (Data Store)
         ▼
 ┌─────────────────────────────────────────┐
 │ WP 02 — Queue Publisher + Adapters       │
@@ -58,14 +58,14 @@ WordPress (post.published / post.updated)
 │  → success/retry/failed → rate-limit wait│
 └─────────────────────────────────────────┘
         │
-        ├─▶ success → omid90_publish_queue.status = sent
+        ├─▶ success → wordpress-publisher_publish_queue.status = sent
         └─▶ failure → retry (temporary) یا failed (permanent/max attempts)
                           │
                           ▼
                  ┌─────────────────────────┐
                  │ WP 03 — Error Handler    │
                  │  errorTrigger + dead-job │
-                 │  → omid90_errors + Alert │
+                 │  → wordpress-publisher_errors + Alert │
                  └─────────────────────────┘
 
 ┌─────────────────────────────────────────┐
@@ -125,8 +125,8 @@ publicationVersion = article.modifiedAt (ISO string)
 - شکست یک پلتفرم (مثلاً X) هرگز باعث ارسال دوباره پلتفرم موفق (مثلاً Telegram) نمی‌شود، چون وضعیت هر Job در ردیف مستقل خودش نگه‌داری می‌شود.
 
 Dedup دو لایه است (دقیقاً مثل پروژه قبلی):
-1. `event_id` یکتا در `omid90_events` (جلوگیری از پردازش دوباره کل Event).
-2. `job_id` یکتا در `omid90_publish_queue` (جلوگیری از Job تکراری برای یک پلتفرم).
+1. `event_id` یکتا در `wordpress-publisher_events` (جلوگیری از پردازش دوباره کل Event).
+2. `job_id` یکتا در `owordpress-publisher_publish_queue` (جلوگیری از Job تکراری برای یک پلتفرم).
 
 ---
 
@@ -139,7 +139,7 @@ Dedup دو لایه است (دقیقاً مثل پروژه قبلی):
 
 فرمول Backoff فعلی: `min(60, 2^attempts)` دقیقه — قابل تنظیم در Code Node `طبقه‌بندی خطا و محاسبه Retry/Backoff` در Workflow 02.
 
-هر Job شکست نهایی‌خورده هم در `omid90_publish_queue.status=failed` ثبت می‌شود و هم یک ردیف مستقل در `omid90_errors` می‌سازد و هشدار مدیر ارسال می‌کند — این مسیر مستقل از `errorTrigger` است چون شکست یک Job یک خطای تجاری قابل پیش‌بینی است، نه یک Exception فنی؛ `errorTrigger`/Workflow 03 برای خطاهای واقعی اجرا (Node crash، Data Store قطع، خطای غیرمنتظره) رزرو شده است.
+هر Job شکست نهایی‌خورده هم در `wordpress-publisher_publish_queue.status=failed` ثبت می‌شود و هم یک ردیف مستقل در `wordpress-publisher_errors` می‌سازد و هشدار مدیر ارسال می‌کند — این مسیر مستقل از `errorTrigger` است چون شکست یک Job یک خطای تجاری قابل پیش‌بینی است، نه یک Exception فنی؛ `errorTrigger`/Workflow 03 برای خطاهای واقعی اجرا (Node crash، Data Store قطع، خطای غیرمنتظره) رزرو شده است.
 
 ---
 
