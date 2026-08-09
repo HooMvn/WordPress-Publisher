@@ -47,7 +47,7 @@ Variables، Credentials، و Data Table Filters. تا این‌ها انجام �
 
 ## 3. Data Table Filters (Fix #11) — تنظیم دستی بعد از ساخت جدول
 
-هر ۳ جدول (`omid90_events`, `omid90_publish_queue`, `omid90_errors`) باید طبق `DATA_TABLES.md` ساخته شوند.
+هر ۳ جدول (`wordpress-publisher_events`, `wordpress-publisher_publish_queue`, `wordpress-publisher_errors`) باید طبق `DATA_TABLES.md` ساخته شوند.
 شکل `filters.conditions` که در JSON این پروژه نوشته شده (`{keyName, condition, keyValue}`) **بهترین برداشت ما از
 مستندات عمومی Data Table Node** است؛ ممکن است بین نسخه‌های n8n اسم فیلد کمی فرق کند. بعد از Import:
 
@@ -68,8 +68,8 @@ Variables، Credentials، و Data Table Filters. تا این‌ها انجام �
 
 ```sql
 -- روی جدول واقعی زیرین Data Table (یا معادل UI آن) اجرا شود:
-ALTER TABLE omid90_events ADD CONSTRAINT omid90_events_event_id_key UNIQUE (event_id);
-ALTER TABLE omid90_publish_queue ADD CONSTRAINT omid90_publish_queue_job_id_key UNIQUE (job_id);
+ALTER TABLE wordpress-publisher_events ADD CONSTRAINT wordpress-publisher_events_event_id_key UNIQUE (event_id);
+ALTER TABLE wordpress-publisher_publish_queue ADD CONSTRAINT wordpress-publisher_publish_queue_job_id_key UNIQUE (job_id);
 ```
 
 بدون این Constraint، منطق Fix #10 (تشخیص خطای Insert به‌عنوان نشانه Race) هیچ‌وقت فعال نمی‌شود چون Insert
