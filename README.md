@@ -15,7 +15,7 @@
   * WP 04 — Publication Dashboard API
 * هر ۱۵ مورد مطرح‌شده در Code Review اصلاح شدند.
 * احراز هویت Webhook با `X-WP-Webhook-Secret` و مقایسه Timing-Safe پیاده‌سازی شد.
-* Header قدیمی `x-wordpress-publisher-webhook-secret` حذف شد.
+* Header قدیمی `x-omid90-webhook-secret` حذف شد.
 * تفکیک پاسخ‌های HTTP بین 401 برای Authentication و 422 برای Payload نامعتبر انجام شد.
 * واکشی WordPress با `fullResponse=true` و بررسی واقعی Status Code اصلاح شد.
 * مشکل Unknown Platform در Queue Publisher اصلاح شد.
