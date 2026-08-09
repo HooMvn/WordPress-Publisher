@@ -1,0 +1,198 @@
+{
+  "name": "WP 04 — Publication Dashboard API",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "GET",
+        "path": "wp-publication-dashboard",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "d-webhook",
+      "name": "Dashboard API",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -900,
+        0
+      ],
+      "webhookId": "wp-publication-dashboard"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_events"
+        },
+        "options": {}
+      },
+      "id": "d-read-events",
+      "name": "خواندن Events",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        -160
+      ],
+      "notesInFlow": true,
+      "notes": "برای داشبورد رویدادهای ۳۰ روز اخیر را بخوانید."
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_publish_queue"
+        },
+        "options": {}
+      },
+      "id": "d-read-queue",
+      "name": "خواندن Queue",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        0
+      ],
+      "notesInFlow": true,
+      "notes": "برای داشبورد Jobهای ۳۰ روز اخیر را بخوانید."
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "list",
+          "value": "",
+          "cachedResultName": "omid90_errors"
+        },
+        "options": {}
+      },
+      "id": "d-read-errors",
+      "name": "خواندن Errors",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1,
+      "position": [
+        -660,
+        160
+      ],
+      "notesInFlow": true,
+      "notes": "برای داشبورد خطاهای ۳۰ روز اخیر را بخوانید."
+    },
+    {
+      "parameters": {
+        "jsCode": "const events = $('خواندن Events').all().map(i=>i.json);\nconst queue = $('خواندن Queue').all().map(i=>i.json);\nconst errors = $('خواندن Errors').all().map(i=>i.json);\n\nconst byStatus={}, byPlatform={}, byDate={};\nfor(const j of queue){\n  const st=j.status||'unknown';\n  byStatus[st]=(byStatus[st]||0)+1;\n  const pf=j.platform||'unknown';\n  byPlatform[pf]=(byPlatform[pf]||0)+1;\n  const d=(j.created_at||'').slice(0,10);\n  if(d){ byDate[d]=(byDate[d]||0)+1; }\n}\nconst sent=byStatus.sent||0, failed=byStatus.failed||0, pending=byStatus.pending||0, processing=byStatus.processing||0;\nconst retrying = queue.filter(j=>j.status==='pending' && Number(j.attempts||0)>0).length;\nconst finished = sent+failed;\nconst successRate = finished ? Math.round(sent*10000/finished)/100 : 100;\n\nconst latencies = queue.filter(j=>j.sent_at && j.started_at).map(j=> new Date(j.sent_at)-new Date(j.started_at));\nconst avgLatencyMs = latencies.length ? Math.round(latencies.reduce((a,b)=>a+b,0)/latencies.length) : null;\n\nreturn [{json:{\n  generatedAt:new Date().toISOString(),\n  summary:{\n    totalArticles: events.length,\n    totalJobs: queue.length,\n    pending, processing, sent, failed, retrying,\n    successRate,\n    avgLatencyMs,\n    openErrors: errors.filter(e=>(e.status||'open')==='open').length\n  },\n  byStatus, byPlatform, byDate,\n  recentPublications: queue.filter(j=>j.status==='sent').slice(-20).reverse(),\n  recentFailures: queue.filter(j=>j.status==='failed').slice(-20).reverse(),\n  recentErrors: errors.slice(-20).reverse()\n}}];"
+      },
+      "id": "d-kpi",
+      "name": "محاسبه KPI انتشار",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -380,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "d-respond",
+      "name": "پاسخ داشبورد",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.4,
+      "position": [
+        -120,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Dashboard API": {
+      "main": [
+        [
+          {
+            "node": "خواندن Events",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "خواندن Queue",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "خواندن Errors",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "خواندن Events": {
+      "main": [
+        [
+          {
+            "node": "محاسبه KPI انتشار",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "خواندن Queue": {
+      "main": [
+        [
+          {
+            "node": "محاسبه KPI انتشار",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "خواندن Errors": {
+      "main": [
+        [
+          {
+            "node": "محاسبه KPI انتشار",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "محاسبه KPI انتشار": {
+      "main": [
+        [
+          {
+            "node": "پاسخ داشبورد",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "saveExecutionProgress": true,
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "id": "wp04-dashboard",
+  "tags": []
+}

@@ -1,0 +1,210 @@
+[
+  {
+    "name": "T1 Valid secret+event -> valid=true",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T3 Wrong secret -> valid=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T4 Unknown eventType -> valid=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T-Normalize article.title stripped",
+    "expected": "عنوان \"تست\" مقاله",
+    "actual": "عنوان \"تست\" مقاله",
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T-Normalize eventId format",
+    "expected": "wp:555:2026-08-01T10:00:00Z",
+    "actual": "wp:555:2026-08-01T10:00:00Z",
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T-Normalize categories/tags",
+    "expected": {
+      "c": [
+        "دسته یک"
+      ],
+      "t": [
+        "برچسب یک"
+      ]
+    },
+    "actual": {
+      "c": [
+        "دسته یک"
+      ],
+      "t": [
+        "برچسب یک"
+      ]
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T2 Duplicate event -> duplicate=true",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T2b New event, no rows -> duplicate=false",
+    "expected": false,
+    "actual": false,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T-Jobs count == active platforms",
+    "expected": 3,
+    "actual": 3,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T-Jobs job_id format",
+    "expected": "555:telegram:2026-08-01T10:00:00Z",
+    "actual": "555:telegram:2026-08-01T10:00:00Z",
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T6 X tweet <= 280 chars",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": "actual length=252"
+  },
+  {
+    "name": "T Telegram text <= 4096",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T Delivery success ok=true",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T7 429 -> ok=false, permanent=false",
+    "expected": {
+      "ok": false,
+      "permanent": false
+    },
+    "actual": {
+      "ok": false,
+      "permanent": false
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T8 401 -> ok=false, permanent=true",
+    "expected": {
+      "ok": false,
+      "permanent": true
+    },
+    "actual": {
+      "ok": false,
+      "permanent": true
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T7b Temp failure below max -> finalFailed=false, status=pending",
+    "expected": {
+      "finalFailed": false,
+      "status": "pending"
+    },
+    "actual": {
+      "finalFailed": false,
+      "status": "pending"
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T9 Max attempts reached -> finalFailed=true, status=failed",
+    "expected": {
+      "finalFailed": true,
+      "status": "failed"
+    },
+    "actual": {
+      "finalFailed": true,
+      "status": "failed"
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T8b Permanent 401 on attempt 1 -> finalFailed=true immediately",
+    "expected": true,
+    "actual": true,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T RateLimit default eitaa=3s",
+    "expected": 3,
+    "actual": 3,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T RateLimit var override eitaa=7s",
+    "expected": 7,
+    "actual": 7,
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T11 Dashboard totals",
+    "expected": {
+      "totalArticles": 2,
+      "totalJobs": 3,
+      "sent": 1,
+      "failed": 1,
+      "pending": 1,
+      "openErrors": 1,
+      "successRate": 50
+    },
+    "actual": {
+      "totalArticles": 2,
+      "totalJobs": 3,
+      "sent": 1,
+      "failed": 1,
+      "pending": 1,
+      "openErrors": 1,
+      "successRate": 50
+    },
+    "status": "PASS",
+    "notes": ""
+  },
+  {
+    "name": "T Dashboard empty data -> successRate=100, no crash",
+    "expected": 100,
+    "actual": 100,
+    "status": "PASS",
+    "notes": ""
+  }
+]

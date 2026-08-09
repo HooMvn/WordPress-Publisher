@@ -1,0 +1,107 @@
+version: "3.9"
+
+# نمونه آموزشی Queue Mode برای WordPress -> Multi-Platform Publisher
+# این فایل عیناً از معماری Docker پروژه قبلی Omid90 گرفته شده؛ هیچ تغییری در زیرساخت n8n/Postgres/Redis لازم نبود
+# چون این پروژه هم از همان الگوی Event -> Data Store -> Queue -> Worker استفاده می‌کند.
+# قبل از Production همه CHANGE_MEها را با Secret Manager یا فایل env امن جایگزین کنید.
+# Redis و PostgreSQL نباید روی اینترنت عمومی منتشر شوند.
+
+x-n8n-common: &n8n-common
+  image: n8nio/n8n:latest
+  restart: unless-stopped
+  environment: &n8n-environment
+    EXECUTIONS_MODE: queue
+    QUEUE_BULL_REDIS_HOST: redis
+    QUEUE_BULL_REDIS_PORT: 6379
+    QUEUE_BULL_REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+    DB_TYPE: postgresdb
+    DB_POSTGRESDB_HOST: postgres
+    DB_POSTGRESDB_PORT: 5432
+    DB_POSTGRESDB_DATABASE: ${POSTGRES_DB}
+    DB_POSTGRESDB_USER: ${POSTGRES_USER}
+    DB_POSTGRESDB_PASSWORD: ${POSTGRES_PASSWORD}
+
+    N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY}
+    N8N_HOST: ${N8N_HOST}
+    N8N_PROTOCOL: https
+    WEBHOOK_URL: https://${N8N_HOST}/
+    GENERIC_TIMEZONE: Asia/Tehran
+    TZ: Asia/Tehran
+
+    N8N_METRICS: "true"
+    N8N_LOG_LEVEL: info
+    EXECUTIONS_DATA_SAVE_ON_SUCCESS: none
+    EXECUTIONS_DATA_SAVE_ON_ERROR: all
+    EXECUTIONS_DATA_PRUNE: "true"
+    EXECUTIONS_DATA_MAX_AGE: 336
+
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  networks:
+    - omid90_n8n_private
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - omid90_n8n_private
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - omid90_n8n_private
+
+  n8n-main:
+    <<: *n8n-common
+    command: start
+    ports:
+      - "127.0.0.1:5678:5678"
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  n8n-worker-1:
+    <<: *n8n-common
+    command: worker --concurrency=10
+
+  n8n-worker-2:
+    <<: *n8n-common
+    command: worker --concurrency=10
+
+  # برای بار Webhook بالا، پس از تست نسخه نصب‌شده و Reverse Proxy فعال شود.
+  # n8n-webhook-1:
+  #   <<: *n8n-common
+  #   command: webhook
+
+volumes:
+  postgres_data:
+  redis_data:
+  n8n_data:
+
+networks:
+  omid90_n8n_private:
+    driver: bridge
