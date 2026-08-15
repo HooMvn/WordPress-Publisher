@@ -103,12 +103,12 @@
 
 برنامه فردا:
 
-1. اجرای `docker compose up` با Imageهای Pin‌شده.
-2. Import هر ۴ Workflow در n8n واقعی.
+1. اجرای `docker compose up` با Imageهای Pin‌شده.✅
+2. Import هر ۴ Workflow در n8n واقعی.✅
 3. ساخت و اتصال هر ۳ Data Table طبق Schema مستندشده.
-4. تنظیم Environment Variables و Credentialها.
-5. اجرای تست‌های PowerShell روی Webhook.
-6. تست 401 و 422 به‌صورت واقعی.
+4. تنظیم Environment Variables و Credentialها.✅
+5. اجرای تست‌های PowerShell روی Webhook.✅
+6. تست 401 و 422 به‌صورت واقعی.✅
 7. تست Event Dedup و Race Condition با Requestهای هم‌زمان.
 8. تست Queue، Retry، Backoff و Lock روی Data Table واقعی.
 9. تست انتشار واقعی روی پلتفرم‌های هدف.
